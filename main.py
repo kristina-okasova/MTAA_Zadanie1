@@ -5,6 +5,9 @@ import re
 import sys
 import time
 import logging
+import threading
+from sys import exit
+
 
 HOST, PORT = '0.0.0.0', 5060
 rx_register = re.compile('^REGISTER')
@@ -429,16 +432,15 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 logging.warning("---")
 
     def writeBeginningOfCall(self, timeOfCalling):
-        callID = sum(1 for line in open("phoneCallDiary.txt", "r"))
         phoneCallDiary = open("phoneCallDiary.txt", "a")
-        phoneCallDiary.write("Call #" + str(callID // 6 + 1) + ":\n\tFrom: " + self.getOrigin() + "\n\tTo: " +
+        phoneCallDiary.write("Call record:\n\tFrom: " + self.getOrigin() + "\n\tTo: " +
                              self.getDestination() + "\n\tTime of calling: " + str(timeOfCalling.strftime("%H:%M:%S"))
                              + "\n")
 
     @staticmethod
     def writeAnsweringOfCall(timeOfAnswering):
         lineID = sum(1 for line in open("phoneCallDiary.txt", "r"))
-        if lineID % 7 == 4:
+        if lineID % 6 == 4:
             phoneCallDiary = open("phoneCallDiary.txt", "a")
             phoneCallDiary.write("\tTime of answering: " + str(timeOfAnswering.strftime("%H:%M:%S")) + "\n")
 
@@ -448,7 +450,7 @@ class UDPHandler(socketserver.BaseRequestHandler):
         phoneCallDiary.write("\tTime of hanging up: " + str(timeOfHangingUp.strftime("%H:%M:%S")) + "\n")
 
 
-if __name__ == '__main__':
+def initializeProxy():
     logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='proxy.log', level=logging.INFO,
                         datefmt='%H:%M:%S')
     logging.info(time.strftime("%a, %d %b %Y %H:%M:%S ", time.localtime()))
@@ -458,7 +460,21 @@ if __name__ == '__main__':
     if ipaddress == "127.0.0.1":
         ipaddress = sys.argv[1]
     logging.info(ipaddress)
+    global recordroute
     recordroute = "Record-Route: <sip:%s:%d;lr>" % (ipaddress, PORT)
+    global topvia
     topvia = "Via: SIP/2.0/UDP %s:%d" % (ipaddress, PORT)
     server = socketserver.UDPServer((HOST, PORT), UDPHandler)
     server.serve_forever()
+
+
+if __name__ == '__main__':
+    startProxy = input("Press Y if you want to start SIP proxy or N if you want to stop the execution. ").upper()
+    while startProxy != 'Y' and startProxy != 'N':
+        startProxy = input("Press Y if you want to start SIP proxy or N if you want to stop the execution. ").upper()
+
+    if startProxy == 'Y':
+        proxy = threading.Thread(target=initializeProxy)
+        proxy.start()
+    else:
+        exit(0)
