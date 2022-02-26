@@ -1,29 +1,12 @@
-#    Copyright 2014 Philippe THIRION
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-
-#    You should have received a copy of the GNU General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-import SocketServer
-import re
-import string
 import socket
-# import threading
+import socketserver
+import re
 import sys
 import time
 import logging
 
 HOST, PORT = '0.0.0.0', 5060
-rx_register = re.compile("^REGISTER")
+rx_register = re.compile('^REGISTER')
 rx_invite = re.compile("^INVITE")
 rx_ack = re.compile("^ACK")
 rx_prack = re.compile("^PRACK")
@@ -86,9 +69,9 @@ def showtime():
     logging.debug(time.strftime("(%H:%M:%S)", time.localtime()))
 
 
-class UDPHandler(SocketServer.BaseRequestHandler):
-
-    def debugRegister(self):
+class UDPHandler(socketserver.BaseRequestHandler):
+    @staticmethod
+    def debugRegister():
         logging.debug("*** REGISTRAR ***")
         logging.debug("*****************")
         for key in registrar.keys():
@@ -101,7 +84,7 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         if md:
             method = md.group(1)
             uri = md.group(2)
-            if registrar.has_key(uri):
+            if uri in registrar.keys():
                 uri = "sip:%s" % registrar[uri][0]
                 self.data[0] = "%s %s SIP/2.0" % (method, uri)
 
@@ -109,14 +92,21 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         # delete Route
         data = []
         for line in self.data:
+            try:
+                line = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
             if not rx_route.search(line):
                 data.append(line)
         return data
 
     def addTopVia(self):
-        branch = ""
         data = []
         for line in self.data:
+            try:
+                line = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
             if rx_via.search(line) or rx_cvia.search(line):
                 md = rx_branch.search(line)
                 if md:
@@ -145,8 +135,9 @@ class UDPHandler(SocketServer.BaseRequestHandler):
                 data.append(line)
         return data
 
-    def checkValidity(self, uri):
-        addrport, socket, client_addr, validity = registrar[uri]
+    @staticmethod
+    def checkValidity(uri):
+        addrport, socketValid, client_addr, validity = registrar[uri]
         now = int(time.time())
         if validity > now:
             return True
@@ -155,13 +146,18 @@ class UDPHandler(SocketServer.BaseRequestHandler):
             logging.warning("registration for %s has expired" % uri)
             return False
 
-    def getSocketInfo(self, uri):
-        addrport, socket, client_addr, validity = registrar[uri]
-        return (socket, client_addr)
+    @staticmethod
+    def getSocketInfo(uri):
+        addrport, socketInfo, client_addr, validity = registrar[uri]
+        return socketInfo, client_addr
 
     def getDestination(self):
         destination = ""
         for line in self.data:
+            try:
+                line = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
             if rx_to.search(line) or rx_cto.search(line):
                 md = rx_uri.search(line)
                 if md:
@@ -172,6 +168,10 @@ class UDPHandler(SocketServer.BaseRequestHandler):
     def getOrigin(self):
         origin = ""
         for line in self.data:
+            try:
+                line = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
             if rx_from.search(line) or rx_cfrom.search(line):
                 md = rx_uri.search(line)
                 if md:
@@ -186,6 +186,10 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         data = []
         for line in self.data:
             data.append(line)
+            try:
+                line = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
             if rx_to.search(line) or rx_cto.search(line):
                 if not rx_tag.search(line):
                     data[index] = "%s%s" % (line, ";tag=123456")
@@ -205,8 +209,15 @@ class UDPHandler(SocketServer.BaseRequestHandler):
             if line == "":
                 break
         data.append("")
-        text = string.join(data, "\r\n")
-        self.socket.sendto(text, self.client_address)
+        index = 0
+        for line in data:
+            try:
+                data[index] = line.decode("utf-8")
+            except (UnicodeDecodeError, AttributeError):
+                pass
+            index += 1
+        text = '\r\n'.join(data)
+        self.socket.sendto(bytes(text, "utf-8"), self.client_address)
         showtime()
         logging.info("<<< %s" % data[0])
         logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
@@ -218,12 +229,8 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         header_expires = ""
         expires = 0
         validity = 0
-        authorization = ""
-        index = 0
-        auth_index = 0
-        data = []
-        size = len(self.data)
         for line in self.data:
+            line = line.decode("utf-8")
             if rx_to.search(line) or rx_cto.search(line):
                 md = rx_uri.search(line)
                 if md:
@@ -243,18 +250,13 @@ class UDPHandler(SocketServer.BaseRequestHandler):
             if md:
                 header_expires = md.group(1)
 
-        if rx_invalid.search(contact) or rx_invalid2.search(contact):
-            if registrar.has_key(fromm):
-                del registrar[fromm]
-            self.sendResponse("488 Not Acceptable Here")
-            return
         if len(contact_expires) > 0:
             expires = int(contact_expires)
         elif len(header_expires) > 0:
             expires = int(header_expires)
 
         if expires == 0:
-            if registrar.has_key(fromm):
+            if fromm in registrar.keys():
                 del registrar[fromm]
                 self.sendResponse("200 0K")
                 return
@@ -274,21 +276,22 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         logging.debug(" INVITE received ")
         logging.debug("-----------------")
         origin = self.getOrigin()
-        if len(origin) == 0 or not registrar.has_key(origin):
+        if len(origin) == 0 or origin not in registrar.keys():
             self.sendResponse("400 Bad Request")
             return
         destination = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
-            if registrar.has_key(destination) and self.checkValidity(destination):
-                socket, claddr = self.getSocketInfo(destination)
+            if destination in registrar.keys() and self.checkValidity(destination):
+                socketInvite, claddr = self.getSocketInfo(destination)
                 # self.changeRequestUri()
+                # noinspection PyAttributeOutsideInit
                 self.data = self.addTopVia()
                 data = self.removeRouteHeader()
                 # insert Record-Route
                 data.insert(1, recordroute)
-                text = string.join(data, "\r\n")
-                socket.sendto(text, claddr)
+                text = '\r\n'.join(data)
+                socketInvite.sendto(bytes(text, "utf-8"), claddr)
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
@@ -304,15 +307,16 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         destination = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
-            if registrar.has_key(destination):
-                socket, claddr = self.getSocketInfo(destination)
+            if destination in registrar.keys():
+                socketAck, claddr = self.getSocketInfo(destination)
                 # self.changeRequestUri()
+                # noinspection PyAttributeOutsideInit
                 self.data = self.addTopVia()
                 data = self.removeRouteHeader()
                 # insert Record-Route
                 data.insert(1, recordroute)
-                text = string.join(data, "\r\n")
-                socket.sendto(text, claddr)
+                text = '\r\n'.join(data)
+                socketAck.sendto(bytes(text, "utf-8"), claddr)
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
@@ -322,21 +326,22 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         logging.debug(" NonInvite received   ")
         logging.debug("----------------------")
         origin = self.getOrigin()
-        if len(origin) == 0 or not registrar.has_key(origin):
+        if len(origin) == 0 or origin not in registrar.keys():
             self.sendResponse("400 Bad Request")
             return
         destination = self.getDestination()
         if len(destination) > 0:
             logging.info("destination %s" % destination)
-            if registrar.has_key(destination) and self.checkValidity(destination):
-                socket, claddr = self.getSocketInfo(destination)
+            if destination in registrar.keys() and self.checkValidity(destination):
+                socketNonInvite, claddr = self.getSocketInfo(destination)
                 # self.changeRequestUri()
+                # noinspection PyAttributeOutsideInit
                 self.data = self.addTopVia()
                 data = self.removeRouteHeader()
                 # insert Record-Route
                 data.insert(1, recordroute)
-                text = string.join(data, "\r\n")
-                socket.sendto(text, claddr)
+                text = '\r\n'.join(data)
+                socketNonInvite.sendto(bytes(text, "utf-8"), claddr)
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
@@ -349,12 +354,13 @@ class UDPHandler(SocketServer.BaseRequestHandler):
         origin = self.getOrigin()
         if len(origin) > 0:
             logging.debug("origin %s" % origin)
-            if registrar.has_key(origin):
-                socket, claddr = self.getSocketInfo(origin)
+            if origin in registrar.keys():
+                socketCode, claddr = self.getSocketInfo(origin)
+                # noinspection PyAttributeOutsideInit
                 self.data = self.removeRouteHeader()
                 data = self.removeTopVia()
-                text = string.join(data, "\r\n")
-                socket.sendto(text, claddr)
+                text = '\r\n'.join(data)
+                socketCode.sendto(bytes(text, "utf-8"), claddr)
                 showtime()
                 logging.info("<<< %s" % data[0])
                 logging.debug("---\n<< server send [%d]:\n%s\n---" % (len(text), text))
@@ -362,7 +368,7 @@ class UDPHandler(SocketServer.BaseRequestHandler):
     def processRequest(self):
         # print "processRequest"
         if len(self.data) > 0:
-            request_uri = self.data[0]
+            request_uri = self.data[0].decode("utf-8")
             if rx_register.search(request_uri):
                 self.processRegister()
             elif rx_invite.search(request_uri):
@@ -400,9 +406,11 @@ class UDPHandler(SocketServer.BaseRequestHandler):
     def handle(self):
         # socket.setdefaulttimeout(120)
         data = self.request[0]
-        self.data = data.split("\r\n")
+        # noinspection PyAttributeOutsideInit
+        self.data = data.split(b'\r\n')
+        # noinspection PyAttributeOutsideInit
         self.socket = self.request[1]
-        request_uri = self.data[0]
+        request_uri = self.data[0].decode("utf-8")
         if rx_request_uri.search(request_uri) or rx_code.search(request_uri):
             showtime()
             logging.info(">>> %s" % request_uri)
@@ -417,7 +425,7 @@ class UDPHandler(SocketServer.BaseRequestHandler):
                 logging.warning("---")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s', filename='proxy.log', level=logging.INFO,
                         datefmt='%H:%M:%S')
     logging.info(time.strftime("%a, %d %b %Y %H:%M:%S ", time.localtime()))
@@ -429,5 +437,5 @@ if __name__ == "__main__":
     logging.info(ipaddress)
     recordroute = "Record-Route: <sip:%s:%d;lr>" % (ipaddress, PORT)
     topvia = "Via: SIP/2.0/UDP %s:%d" % (ipaddress, PORT)
-    server = SocketServer.UDPServer((HOST, PORT), UDPHandler)
+    server = socketserver.UDPServer((HOST, PORT), UDPHandler)
     server.serve_forever()
