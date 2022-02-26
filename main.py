@@ -1,3 +1,4 @@
+import datetime
 import socket
 import socketserver
 import re
@@ -373,10 +374,13 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 self.processRegister()
             elif rx_invite.search(request_uri):
                 self.processInvite()
+                self.writeBeginningOfCall(datetime.datetime.now().time())
             elif rx_ack.search(request_uri):
                 self.processAck()
+                self.writeAnsweringOfCall(datetime.datetime.now().time())
             elif rx_bye.search(request_uri):
                 self.processNonInvite()
+                self.writeEndOfCall(datetime.datetime.now().time())
             elif rx_cancel.search(request_uri):
                 self.processNonInvite()
             elif rx_options.search(request_uri):
@@ -423,6 +427,25 @@ class UDPHandler(socketserver.BaseRequestHandler):
                 logging.warning("---\n>> server received [%d]:" % len(data))
                 hexdump(data, ' ', 16)
                 logging.warning("---")
+
+    def writeBeginningOfCall(self, timeOfCalling):
+        callID = sum(1 for line in open("phoneCallDiary.txt", "r"))
+        phoneCallDiary = open("phoneCallDiary.txt", "a")
+        phoneCallDiary.write("Call #" + str(callID // 6 + 1) + ":\n\tFrom: " + self.getOrigin() + "\n\tTo: " +
+                             self.getDestination() + "\n\tTime of calling: " + str(timeOfCalling.strftime("%H:%M:%S"))
+                             + "\n")
+
+    @staticmethod
+    def writeAnsweringOfCall(timeOfAnswering):
+        lineID = sum(1 for line in open("phoneCallDiary.txt", "r"))
+        if lineID % 7 == 4:
+            phoneCallDiary = open("phoneCallDiary.txt", "a")
+            phoneCallDiary.write("\tTime of answering: " + str(timeOfAnswering.strftime("%H:%M:%S")) + "\n")
+
+    @staticmethod
+    def writeEndOfCall(timeOfHangingUp):
+        phoneCallDiary = open("phoneCallDiary.txt", "a")
+        phoneCallDiary.write("\tTime of hanging up: " + str(timeOfHangingUp.strftime("%H:%M:%S")) + "\n")
 
 
 if __name__ == '__main__':
