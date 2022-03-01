@@ -486,20 +486,22 @@ if __name__ == '__main__':
     while startProxy != 'Y' and startProxy != 'N':
         startProxy = input("Press Y if you want to start SIP proxy or N if you want to stop the execution. ").upper()
 
-    if startProxy == 'Y':
-        print("SIP proxy is running.")
-        proxy = threading.Thread(target=initializeProxy)
-        proxy.start()
-        time.sleep(3)
+    try:
+        if startProxy == 'Y':
+            print("SIP proxy is running.")
+            proxy = threading.Thread(target=initializeProxy)
+            proxy.start()
+            time.sleep(1)
 
-        stopProxy = input("Press Y if you want to stop SIP proxy. ").upper()
-        while stopProxy != 'Y':
             stopProxy = input("Press Y if you want to stop SIP proxy. ").upper()
+            while stopProxy != 'Y':
+                stopProxy = input("Press Y if you want to stop SIP proxy. ").upper()
 
-        if stopProxy == 'Y':
-            print("Shutdown of SIP proxy")
-            proxy.join()
+            if stopProxy == 'Y':
+                print("Shutdown of SIP proxy")
+                raise KeyboardInterrupt
+
+        else:
             sys.exit(0)
-
-    else:
+    except KeyboardInterrupt:
         sys.exit(0)
