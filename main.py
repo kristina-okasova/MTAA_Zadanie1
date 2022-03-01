@@ -1,3 +1,18 @@
+#    Copyright 2014 Philippe THIRION
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import datetime
 import socket
 import socketserver
@@ -6,11 +21,10 @@ import sys
 import time
 import logging
 import threading
-from sys import exit
 
 
 HOST, PORT = '0.0.0.0', 5060
-rx_register = re.compile('^REGISTER')
+rx_register = re.compile("^REGISTER")
 rx_invite = re.compile("^INVITE")
 rx_ack = re.compile("^ACK")
 rx_prack = re.compile("^PRACK")
@@ -439,10 +453,8 @@ class UDPHandler(socketserver.BaseRequestHandler):
 
     @staticmethod
     def writeAnsweringOfCall(timeOfAnswering):
-        lineID = sum(1 for line in open("phoneCallDiary.txt", "r"))
-        if lineID % 6 == 4:
-            phoneCallDiary = open("phoneCallDiary.txt", "a")
-            phoneCallDiary.write("\tTime of answering: " + str(timeOfAnswering.strftime("%H:%M:%S")) + "\n")
+        phoneCallDiary = open("phoneCallDiary.txt", "a")
+        phoneCallDiary.write("\tTime of answering: " + str(timeOfAnswering.strftime("%H:%M:%S")) + "\n")
 
     @staticmethod
     def writeEndOfCall(timeOfHangingUp):
@@ -460,6 +472,7 @@ def initializeProxy():
     if ipaddress == "127.0.0.1":
         ipaddress = sys.argv[1]
     logging.info(ipaddress)
+    print("Address of SIP proxy: " + ipaddress)
     global recordroute
     recordroute = "Record-Route: <sip:%s:%d;lr>" % (ipaddress, PORT)
     global topvia
@@ -474,7 +487,19 @@ if __name__ == '__main__':
         startProxy = input("Press Y if you want to start SIP proxy or N if you want to stop the execution. ").upper()
 
     if startProxy == 'Y':
+        print("SIP proxy is running.")
         proxy = threading.Thread(target=initializeProxy)
         proxy.start()
+        time.sleep(3)
+
+        stopProxy = input("Press Y if you want to stop SIP proxy. ").upper()
+        while stopProxy != 'Y':
+            stopProxy = input("Press Y if you want to stop SIP proxy. ").upper()
+
+        if stopProxy == 'Y':
+            print("Shutdown of SIP proxy")
+            proxy.join()
+            sys.exit(0)
+
     else:
-        exit(0)
+        sys.exit(0)
